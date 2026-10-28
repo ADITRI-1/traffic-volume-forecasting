@@ -1,4 +1,4 @@
-"""Train the final regressor (volume) and classifier (traffic level) and score them on the later period.
+"""Train the final regressor (volume, with an 80% band) and classifier (traffic level) and score them on the later period.
 
 Usage: python src/train.py --data data
 """
@@ -7,7 +7,7 @@ import os
 import pandas as pd
 from sklearn.metrics import f1_score, mean_absolute_error, r2_score
 from features import clean_train, make_features
-from models import CLF_MODEL, CLF_PARAMS, REG_MODEL, REG_PARAMS, make_model
+from models import BAND, CLF_MODEL, CLF_PARAMS, REG_MODEL, REG_PARAMS, make_model, make_quantile_model
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--data", default="data")
@@ -23,7 +23,11 @@ reg = make_model(REG_MODEL, "reg", REG_PARAMS).fit(make_features(tr_reg), tr_reg
 clf = make_model(CLF_MODEL, "clf", CLF_PARAMS).fit(make_features(tr_clf), tr_clf["y"])
 p_reg = reg.predict(make_features(reg_val))
 p_clf = clf.predict(make_features(clf_val))
+lo = make_quantile_model(BAND[0]).fit(make_features(tr_reg), tr_reg["y"]).predict(make_features(reg_val))
+hi = make_quantile_model(BAND[1]).fit(make_features(tr_reg), tr_reg["y"]).predict(make_features(reg_val))
 
 print("volume  | R2:", round(r2_score(reg_val["y"], p_reg), 4), "| MAE:", round(mean_absolute_error(reg_val["y"], p_reg)))
+print("band    | 80% band covers", round(((reg_val["y"] >= lo) & (reg_val["y"] <= hi)).mean(), 3),
+      "of actual volumes | mean width:", round((hi - lo).mean()))
 print("level   | macro-F1:", round(f1_score(clf_val["y"], p_clf, average="macro"), 4))
-pd.DataFrame({"volume_pred": p_reg, "level_pred": p_clf}).to_csv("predictions.csv", index=False)
+pd.DataFrame({"volume_pred": p_reg, "volume_lo": lo, "volume_hi": hi, "level_pred": p_clf}).to_csv("predictions.csv", index=False)

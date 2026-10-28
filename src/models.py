@@ -24,6 +24,7 @@ REG_MODEL = "hist_gradient_boosting"
 REG_PARAMS = dict(max_iter=200, learning_rate=0.05)
 CLF_MODEL = "hist_gradient_boosting"
 CLF_PARAMS = dict(max_iter=200, learning_rate=0.05)
+BAND = (0.1, 0.9)       # quantiles of the 80% prediction band
 
 
 def make_model(name, task, params=None):
@@ -35,3 +36,8 @@ def make_model(name, task, params=None):
         return make_pipeline(SimpleImputer(strategy="median"), StandardScaler(), SVC(**{**params, "random_state": SEED}))
     cls = TREE_MODELS[name][0 if task == "reg" else 1]
     return cls(**{**params, "random_state": SEED})
+
+
+def make_quantile_model(q):
+    """Final regressor trained with the pinball loss: predicts the q-th quantile of the volume."""
+    return HistGradientBoostingRegressor(**{**REG_PARAMS, "loss": "quantile", "quantile": q, "random_state": SEED})

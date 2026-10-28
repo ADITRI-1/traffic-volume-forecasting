@@ -17,7 +17,7 @@ from sklearn.metrics import f1_score, r2_score
 from sklearn.model_selection import GridSearchCV, KFold, TimeSeriesSplit, cross_val_score
 from sklearn.tree import plot_tree
 from features import FEATURES, DROP, clean_train, make_features, ts_cv
-from models import SEED, REG_PARAMS, make_model
+from models import SEED, BAND, REG_MODEL, REG_PARAMS, make_model, make_quantile_model
 
 warnings.filterwarnings("ignore")
 OUT = "results"
@@ -198,6 +198,32 @@ def main(data):
         res["tree_vs_svm"][name] = {"tree_val_f1": r(f1_score(clf_val.y, tree.predict(np.asarray(Xv, float)), average="macro")),
                                     "svm_val_f1": r(f1_score(clf_val.y, svm.predict(np.asarray(Xv, float)), average="macro"))}
         print(name, tg.best_params_, sp, res["tree_vs_svm"][name])
+
+    # 9. forecast with uncertainty: 80% band from two quantile models
+    Xf, Xvf = make_features(trc), make_features(reg_val)
+    lo = make_quantile_model(BAND[0]).fit(Xf, trc.y).predict(Xvf)
+    hi = make_quantile_model(BAND[1]).fit(Xf, trc.y).predict(Xvf)
+    mid = make_model(REG_MODEL, "reg", REG_PARAMS).fit(Xf, trc.y).predict(Xvf)
+    inside = (yrv >= lo) & (yrv <= hi)
+    res["band"] = {"coverage": r(inside.mean()), "mean_width": round(float((hi - lo).mean()))}
+    print("80% band | coverage on later period:", res["band"])
+
+    P = pd.DataFrame({"t": va.f7, "hour": va.f14, "y": yrv, "lo": lo, "mid": mid, "hi": hi, "inside": inside})
+    w = P.groupby("t").mean()                     # some hours have several rows
+    w = w[w.index < w.index.min() + 24 * 7]       # first week of the later period
+    fig, ax = plt.subplots(1, 2, figsize=(16, 4), gridspec_kw={"width_ratios": [3, 1]})
+    ax[0].fill_between(w.index, w.lo, w.hi, alpha=0.3, label="80% band")
+    ax[0].plot(w.index, w.mid, label="forecast")
+    ax[0].plot(w.index, w.y, "k.", ms=3, label="actual")
+    ax[0].set_xlabel("time (hours)")
+    ax[0].set_ylabel("traffic volume")
+    ax[0].set_title("First week of the later period")
+    ax[0].legend()
+    P.groupby("hour").inside.mean().plot.bar(ax=ax[1])
+    ax[1].axhline(0.8, color="k", ls="--")
+    ax[1].set_ylim(0, 1)
+    ax[1].set_title("Band coverage per hour (target 0.8)")
+    save("forecast_band.png")
 
     with open(os.path.join(OUT, "metrics.json"), "w") as f:
         json.dump(res, f, indent=2)

@@ -10,6 +10,22 @@ The data is uncleaned and anonymised (columns `f1`–`f14`). Most of the gain ca
 | **HistGradientBoosting + cleaning + holiday feature** | **0.952** (MAE 268 vehicles) |
 
 The traffic-level classifier reaches a macro-F1 of **0.873** on the same later period.
+Every volume forecast also comes with an **80% prediction band**, and 79.1% of the actual later-period volumes fall inside it.
+
+## 📈 Forecast with uncertainty
+A single number hides how sure the model is. Two extra HistGradientBoosting models are trained with the quantile (pinball) loss, for the 10th and 90th percentiles.
+Together they give an 80% band around every forecast.
+
+| on the later period | value |
+|---|---|
+| actual volumes inside the 80% band | **79.1%** (target 80%) |
+| mean band width | 868 vehicles |
+
+The band was never fitted on the later period, yet its coverage lands within one point of the target, so the uncertainty is well calibrated.
+It is narrow at night (~120 vehicles at 3:00) and wide at rush hour (~1650 at 7:00), where traffic is harder to predict.
+Coverage is weakest at 5:00 (55%), when the morning ramp-up starts, and at 16:00 (66%), the evening peak. Those hours vary most from day to day.
+
+![forecast band](results/forecast_band.png)
 
 ## Key findings
 
@@ -91,7 +107,7 @@ A tree splits one feature at a time and ignores all three.
 ```bash
 pip install -r requirements.txt
 python src/experiments.py --data data    # all figures + results/metrics.json (~5 min)
-python src/train.py --data data          # final models, scores on the later period
+python src/train.py --data data          # final models + 80% band, scores on the later period
 ```
 
 Expected data layout (not included in this repo):
@@ -106,9 +122,9 @@ data/
 
 ```
 src/features.py      cleaning, feature engineering, time-ordered CV
-src/models.py        seeded model factory and final hyperparameters
-src/experiments.py   EDA, validation comparison, depth curve, ensembles, importance, ablation, tree vs SVM
-src/train.py         train the final regressor and classifier
+src/models.py        seeded model factory, final hyperparameters, quantile models
+src/experiments.py   EDA, validation comparison, depth curve, ensembles, importance, ablation, tree vs SVM, forecast band
+src/train.py         train the final regressor (with 80% band) and classifier
 results/             figures and metrics.json
 ```
 

@@ -65,5 +65,9 @@
       "tree_val_f1": 0.8758,
       "svm_val_f1": 0.7676
     }
+  },
+  "band": {
+    "coverage": 0.7909,
+    "mean_width": 868
   }
 }
